@@ -4,10 +4,9 @@ import { motion } from 'framer-motion';
 export default function Cursor() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
-  const [isMobile, setIsMobile] = useState(true); // Assume mobile by default to prevent flash
+  const [isMobile, setIsMobile] = useState(true);
 
   useEffect(() => {
-    // Check if device has a fine pointer (a mouse)
     const checkPointer = () => {
       setIsMobile(!window.matchMedia('(pointer: fine)').matches);
     };
@@ -44,14 +43,13 @@ export default function Cursor() {
     }
   }, [isMobile]);
 
-  // If it's a touch screen, don't render the custom cursor at all
   if (isMobile) return null;
 
   return (
     <>
       <style>{`* { cursor: none !important; }`}</style>
       <motion.div
-        className="fixed top-0 left-0 w-4 h-4 rounded-full bg-white pointer-events-none z-[100] mix-blend-difference flex items-center justify-center"
+        className="fixed top-0 left-0 w-4 h-4 rounded-full bg-white pointer-events-none z-[9999] mix-blend-difference flex items-center justify-center" // Pushed Z-index to the max
         animate={{
           x: mousePosition.x - 8,
           y: mousePosition.y - 8,

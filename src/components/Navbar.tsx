@@ -1,9 +1,16 @@
+import { useState } from 'react';
 import { ShoppingBag, Search, Menu, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
+import Sidebar from './Sidebar';
+import Checkout from './Checkout';
 
 export default function Navbar() {
   const { cart, cartCount, isCartOpen, setIsCartOpen, removeFromCart } = useCart();
+  
+  // New states for Sidebar and Checkout
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => {
@@ -14,12 +21,26 @@ export default function Navbar() {
 
   return (
     <>
+      {/* Sidebar Component */}
+      <Sidebar isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      
+      {/* Checkout Component */}
+      <Checkout 
+        isOpen={isCheckoutOpen} 
+        onClose={() => setIsCheckoutOpen(false)} 
+        total={calculateTotal()} 
+      />
+
       <nav className="fixed top-0 left-0 right-0 z-40 flex justify-between items-center px-6 md:px-12 py-8 mix-blend-difference text-white">
-        <button type="button" aria-label="Open Menu" className="hover:opacity-50 transition-opacity">
+        <button 
+          type="button" 
+          onClick={() => setIsMenuOpen(true)}
+          aria-label="Open Menu" 
+          className="hover:opacity-50 transition-opacity"
+        >
           <Menu size={24} strokeWidth={1.5} />
         </button>
 
-        {/* Updated Brand Name Here */}
         <div className="absolute left-1/2 -translate-x-1/2 font-sans font-bold text-lg md:text-xl tracking-[0.3em] cursor-pointer whitespace-nowrap">
           THE 5TH VØID
         </div>
@@ -60,7 +81,12 @@ export default function Navbar() {
             >
               <div className="flex justify-between items-center p-8 border-b border-white/10">
                 <h3 className="font-serif italic text-3xl text-white">Your Bag</h3>
-                <button type="button" aria-label="Close Cart" onClick={() => setIsCartOpen(false)} className="p-2 hover:rotate-90 transition-transform duration-300">
+                <button 
+                  type="button" 
+                  aria-label="Close Cart" 
+                  onClick={() => setIsCartOpen(false)} 
+                  className="p-2 hover:rotate-90 transition-transform duration-300"
+                >
                   <X size={28} className="text-white/70 hover:text-white" />
                 </button>
               </div>
@@ -81,7 +107,11 @@ export default function Navbar() {
                         <div className="flex flex-col flex-1 justify-center">
                           <div className="flex justify-between items-start">
                             <h4 className="font-sans text-sm tracking-wider text-white/90">{item.name}</h4>
-                            <button type="button" onClick={() => removeFromCart(item.id)} className="text-white/30 hover:text-white transition-colors">
+                            <button 
+                              type="button" 
+                              onClick={() => removeFromCart(item.id)} 
+                              className="text-white/30 hover:text-white transition-colors"
+                            >
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -103,7 +133,14 @@ export default function Navbar() {
                     <span className="font-sans text-xs uppercase tracking-widest text-white/50">Subtotal</span>
                     <span className="font-mono text-lg">${calculateTotal()}</span>
                   </div>
-                  <button type="button" className="w-full bg-white text-black py-4 font-sans text-xs uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setIsCartOpen(false);
+                      setIsCheckoutOpen(true);
+                    }}
+                    className="w-full bg-white text-black py-4 font-sans text-xs uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors"
+                  >
                     Proceed to Checkout
                   </button>
                 </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
-import { useCart } from '../context/CartContext'; // <-- Import Cart hook
+import { X, Maximize2 } from 'lucide-react';
+import { useCart } from '../context/CartContext';
 
 const collections = [
   { 
@@ -27,22 +27,37 @@ const collections = [
       { name: "Abyss Tee", color: "Chalk White", price: "$90", img: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=600" }
     ]
   },
+  { 
+    id: 'c5', 
+    title: 'Cropped Silhouettes', 
+    category: 'Womenswear',
+    variants: '05 Styles', 
+    img: '/crop-top-1.jpg', // <--- FIXED THIS TO BE THE ACTUAL CROP TOP
+    items: [
+      { name: "Raw Hem Crop", color: "Onyx Black", price: "$110", img: "/crop-top-1.jpg" },
+      { name: "Asymmetric Crop", color: "Faded Bone", price: "$125", img: "/crop-top-2.jpg" },
+      { name: "Distressed Rib Crop", color: "Washed Ash", price: "$115", img: "/crop-top-3.jpg" },
+      { name: "Structural Halter", color: "Pitch Black", price: "$140", img: "/crop-top-4.jpg" },
+      { name: "Mesh Overlay Crop", color: "Chalk White", price: "$130", img: "/crop-top-5.jpg" }
+    ]
+  },
   { id: 'c3', title: 'Void Architecture', category: 'Bottoms & Cargo', variants: '03 Styles', img: 'https://images.unsplash.com/photo-1628714399342-a8c7df0e0176?q=80&w=1200&auto=format&fit=crop', items: [] },
   { id: 'c4', title: 'Hardware & Objects', category: 'Accessories', variants: '08 Pieces', img: 'https://images.unsplash.com/photo-1576871337622-98d48d1cf531?q=80&w=1200&auto=format&fit=crop', items: [] },
 ];
 
 export default function Collections() {
   const [activeVault, setActiveVault] = useState<typeof collections[0] | null>(null);
-  const { addToCart } = useCart(); // <-- Grab the function
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const { addToCart } = useCart();
 
   useEffect(() => {
-    if (activeVault) {
+    if (activeVault || zoomImage) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => { document.body.style.overflow = 'unset'; };
-  }, [activeVault]);
+  }, [activeVault, zoomImage]);
 
   return (
     <section className="bg-[#050505] min-h-screen px-6 md:px-12 py-32 relative">
@@ -123,7 +138,7 @@ export default function Collections() {
                   <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-1">Vault Open</span>
                   <h3 className="font-serif italic text-3xl text-white">{activeVault.title}</h3>
                 </div>
-                <button aria-label="Close Vault" onClick={() => setActiveVault(null)} className="p-2 hover:rotate-90 transition-transform duration-300">
+                <button type="button" aria-label="Close Vault" onClick={() => setActiveVault(null)} className="p-2 hover:rotate-90 transition-transform duration-300">
                   <X size={28} className="text-white/70 hover:text-white" />
                 </button>
               </div>
@@ -135,19 +150,30 @@ export default function Collections() {
                       <div key={idx} className="group cursor-pointer flex flex-col">
                         <div className="aspect-[3/4] bg-[#111] overflow-hidden mb-4 relative">
                           <img src={item.img} alt={item.name} className="w-full h-full object-cover md:grayscale contrast-125 transition-all duration-500 group-hover:scale-110 md:group-hover:grayscale-0" />
-                          <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                             
-                             {/* FIX: Connected the addToCart button here */}
+                          
+                          {/* QUICK VIEW BUTTON */}
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoomImage(item.img);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          >
+                            <Maximize2 size={16} className="text-white" />
+                          </button>
+
+                          <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10">
                              <button 
+                                type="button"
                                 onClick={(e) => {
-                                  e.stopPropagation(); // Prevents clicking the image by accident
+                                  e.stopPropagation(); 
                                   addToCart({ name: item.name, color: item.color, price: item.price, img: item.img });
                                 }}
                                 className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors"
                              >
                                Add to Bag
                              </button>
-
                           </div>
                         </div>
                         <h4 className="font-sans text-sm tracking-wider text-white/90">{item.name}</h4>
@@ -164,6 +190,36 @@ export default function Collections() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* IMAGE ZOOM MODAL */}
+      <AnimatePresence>
+        {zoomImage && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 md:p-12 cursor-zoom-out"
+            onClick={() => setZoomImage(null)}
+          >
+            <motion.img 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }}
+              src={zoomImage} 
+              className="max-h-full max-w-full object-contain shadow-2xl" 
+            />
+            <button 
+              type="button"
+              className="absolute top-8 right-8 text-white/50 hover:text-white transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoomImage(null);
+              }}
+            >
+              <X size={40} strokeWidth={1} />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </section>
