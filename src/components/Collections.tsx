@@ -32,7 +32,7 @@ const collections = [
     title: 'Cropped Silhouettes', 
     category: 'Womenswear',
     variants: '05 Styles', 
-    img: '/crop-top-1.jpg', // <--- FIXED THIS TO BE THE ACTUAL CROP TOP
+    img: '/crop-top-1.jpg', 
     items: [
       { name: "Raw Hem Crop", color: "Onyx Black", price: "$110", img: "/crop-top-1.jpg" },
       { name: "Asymmetric Crop", color: "Faded Bone", price: "$125", img: "/crop-top-2.jpg" },
@@ -60,21 +60,21 @@ export default function Collections() {
   }, [activeVault, zoomImage]);
 
   return (
-    <section className="bg-[#050505] min-h-screen px-6 md:px-12 py-32 relative">
+    <section className="bg-[#050505] min-h-screen px-6 md:px-12 py-20 md:py-32 relative">
       <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] bg-noise" />
       <div className="max-w-[90rem] mx-auto relative z-10">
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-24 pb-8 border-b border-white/10 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 md:mb-24 pb-8 border-b border-white/10 gap-4">
           <div>
-            <span className="font-sans text-xs uppercase tracking-[0.3em] text-white/50 block mb-4">Discover</span>
-            <h2 className="font-serif italic text-5xl md:text-7xl text-white">Campaigns</h2>
+            <span className="font-sans text-[10px] md:text-xs uppercase tracking-[0.3em] text-white/50 block mb-4">Discover</span>
+            <h2 className="font-serif italic text-4xl md:text-7xl text-white">Campaigns</h2>
           </div>
-          <p className="font-sans text-sm text-white/50 max-w-xs md:text-right uppercase tracking-widest leading-relaxed">
+          <p className="font-sans text-[10px] md:text-sm text-white/50 max-w-xs md:text-right uppercase tracking-widest leading-relaxed">
             Select a silhouette to view available colorways and variants.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-32 gap-x-16 lg:gap-x-32">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-20 md:gap-y-32 gap-x-16 lg:gap-x-32">
           {collections.map((collection, i) => (
             <motion.div 
               key={collection.id}
@@ -85,7 +85,7 @@ export default function Collections() {
               transition={{ duration: 1, ease: [0.33, 1, 0.68, 1] }}
               viewport={{ once: true, margin: "-100px" }}
             >
-              <div className="relative overflow-hidden aspect-[4/5] mb-8 bg-[#111]">
+              <div className="relative overflow-hidden aspect-[4/5] mb-6 md:mb-8 bg-[#111]">
                 <img 
                   src={collection.img} 
                   alt={collection.title}
@@ -96,8 +96,9 @@ export default function Collections() {
                     Explore Vault
                   </span>
                 </div>
-                <div className="absolute bottom-4 right-4 md:hidden bg-white/10 backdrop-blur-md border border-white/20 text-white font-sans text-[10px] uppercase tracking-widest px-4 py-2 rounded-full flex items-center gap-2">
-                  Tap to Explore <span className="text-white/50">↗</span>
+                {/* Mobile 'Explore' badge */}
+                <div className="absolute bottom-4 right-4 md:hidden bg-black/60 backdrop-blur-md border border-white/20 text-white font-sans text-[10px] uppercase tracking-widest px-4 py-2 flex items-center gap-2">
+                  Explore <span className="text-white/50">↗</span>
                 </div>
               </div>
               
@@ -105,9 +106,9 @@ export default function Collections() {
                 <div className="flex justify-between items-start">
                   <div>
                     <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-2">{collection.category}</span>
-                    <h3 className="font-serif text-3xl md:text-4xl italic text-white/90 group-hover:text-white transition-colors">{collection.title}</h3>
+                    <h3 className="font-serif text-2xl md:text-4xl italic text-white/90 group-hover:text-white transition-colors">{collection.title}</h3>
                   </div>
-                  <span className="font-mono text-xs text-black bg-white px-3 py-1 rounded-full mt-6">[{collection.variants}]</span>
+                  <span className="font-mono text-[10px] md:text-xs text-black bg-white px-3 py-1 rounded-full mt-4 md:mt-6">[{collection.variants}]</span>
                 </div>
                 <div className="h-[1px] w-full bg-white/10 mt-4 group-hover:bg-white/40 transition-colors duration-500" />
               </div>
@@ -133,44 +134,45 @@ export default function Collections() {
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed top-0 right-0 w-full md:w-[600px] h-screen bg-[#0a0a0a] z-[70] border-l border-white/10 flex flex-col shadow-2xl"
             >
-              <div className="flex justify-between items-center p-8 border-b border-white/10">
+              <div className="flex justify-between items-center p-6 md:p-8 border-b border-white/10">
                 <div>
                   <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-1">Vault Open</span>
-                  <h3 className="font-serif italic text-3xl text-white">{activeVault.title}</h3>
+                  <h3 className="font-serif italic text-2xl md:text-3xl text-white">{activeVault.title}</h3>
                 </div>
                 <button type="button" aria-label="Close Vault" onClick={() => setActiveVault(null)} className="p-2 hover:rotate-90 transition-transform duration-300">
-                  <X size={28} className="text-white/70 hover:text-white" />
+                  <X size={24} className="text-white/70 hover:text-white md:w-7 md:h-7" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar">
                 {activeVault.items && activeVault.items.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 md:gap-6">
                     {activeVault.items.map((item, idx) => (
                       <div key={idx} className="group cursor-pointer flex flex-col">
                         <div className="aspect-[3/4] bg-[#111] overflow-hidden mb-4 relative">
-                          <img src={item.img} alt={item.name} className="w-full h-full object-cover md:grayscale contrast-125 transition-all duration-500 group-hover:scale-110 md:group-hover:grayscale-0" />
+                          <img src={item.img} alt={item.name} className="w-full h-full object-cover md:grayscale contrast-125 transition-all duration-500 md:group-hover:scale-110 md:group-hover:grayscale-0" />
                           
-                          {/* QUICK VIEW BUTTON */}
+                          {/* QUICK VIEW BUTTON - Visible on mobile, hover on desktop */}
                           <button 
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomImage(item.img);
                             }}
-                            className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                            className="absolute top-3 right-3 p-2 bg-black/50 backdrop-blur-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10"
                           >
-                            <Maximize2 size={16} className="text-white" />
+                            <Maximize2 size={14} className="text-white" />
                           </button>
 
-                          <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10">
+                          {/* ADD TO BAG - Visible on mobile, hover slide on desktop */}
+                          <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-300 z-10">
                              <button 
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation(); 
                                   addToCart({ name: item.name, color: item.color, price: item.price, img: item.img });
                                 }}
-                                className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors"
+                                className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors shadow-xl"
                              >
                                Add to Bag
                              </button>
@@ -183,7 +185,7 @@ export default function Collections() {
                     ))}
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-white/30 font-sans text-sm uppercase tracking-widest">
+                  <div className="h-full flex flex-col items-center justify-center text-white/30 font-sans text-xs md:text-sm uppercase tracking-widest">
                     <p>Archived. No items available.</p>
                   </div>
                 )}
@@ -200,7 +202,7 @@ export default function Collections() {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6 md:p-12 cursor-zoom-out"
+            className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 md:p-12 cursor-zoom-out"
             onClick={() => setZoomImage(null)}
           >
             <motion.img 
@@ -211,13 +213,13 @@ export default function Collections() {
             />
             <button 
               type="button"
-              className="absolute top-8 right-8 text-white/50 hover:text-white transition-colors"
+              className="absolute top-6 right-6 md:top-8 md:right-8 text-white/50 hover:text-white transition-colors p-2 bg-black/50 rounded-full md:bg-transparent"
               onClick={(e) => {
                 e.stopPropagation();
                 setZoomImage(null);
               }}
             >
-              <X size={40} strokeWidth={1} />
+              <X size={24} className="md:w-10 md:h-10" strokeWidth={1.5} />
             </button>
           </motion.div>
         )}
