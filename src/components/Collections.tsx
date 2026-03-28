@@ -1,61 +1,88 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Maximize2 } from 'lucide-react';
+import { X, Maximize2, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-
-const collections = [
-  { 
-    id: 'c1', 
-    title: 'The Heavyweight Series', 
-    category: 'Outerwear & Knits',
-    variants: '06 Styles', 
-    img: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=1200&auto=format&fit=crop',
-    items: [
-      { name: "Oversized Null Hoodie", color: "Onyx Black", price: "$180", img: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=600" },
-      { name: "Oversized Null Hoodie", color: "Ash Gray", price: "$180", img: "https://images.unsplash.com/photo-1556821835-51dc58fa3910?q=80&w=600" },
-      { name: "Structured Zip-Up", color: "Faded Bone", price: "$210", img: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?q=80&w=600" }
-    ]
-  },
-  { 
-    id: 'c2', 
-    title: 'Null Essentials', 
-    category: 'Base Layers',
-    variants: '04 Colors', 
-    img: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=1200&auto=format&fit=crop',
-    items: [
-      { name: "Abyss Tee", color: "Pitch Black", price: "$90", img: "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=600" },
-      { name: "Abyss Tee", color: "Chalk White", price: "$90", img: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?q=80&w=600" }
-    ]
-  },
-  { 
-    id: 'c5', 
-    title: 'Cropped Silhouettes', 
-    category: 'Womenswear',
-    variants: '05 Styles', 
-    img: '/crop-top-1.jpg', 
-    items: [
-      { name: "Raw Hem Crop", color: "Onyx Black", price: "$110", img: "/crop-top-1.jpg" },
-      { name: "Asymmetric Crop", color: "Faded Bone", price: "$125", img: "/crop-top-2.jpg" },
-      { name: "Distressed Rib Crop", color: "Washed Ash", price: "$115", img: "/crop-top-3.jpg" },
-      { name: "Structural Halter", color: "Pitch Black", price: "$140", img: "/crop-top-4.jpg" },
-      { name: "Mesh Overlay Crop", color: "Chalk White", price: "$130", img: "/crop-top-5.jpg" }
-    ]
-  },
-  { id: 'c3', title: 'Void Architecture', category: 'Bottoms & Cargo', variants: '03 Styles', img: 'https://images.unsplash.com/photo-1628714399342-a8c7df0e0176?q=80&w=1200&auto=format&fit=crop', items: [] },
-  { id: 'c4', title: 'Hardware & Objects', category: 'Accessories', variants: '08 Pieces', img: 'https://images.unsplash.com/photo-1576871337622-98d48d1cf531?q=80&w=1200&auto=format&fit=crop', items: [] },
-];
+import { supabase } from '../lib/supabase'; // <-- INJECTING THE DATABASE
 
 export default function Collections() {
-  const [activeVault, setActiveVault] = useState<typeof collections[0] | null>(null);
+  const [vaults, setVaults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeVault, setActiveVault] = useState<any | null>(null);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const { addToCart } = useCart();
 
+  // --- NEW: FETCH AND SORT INVENTORY FROM DATABASE ---
   useEffect(() => {
-    if (activeVault || zoomImage) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    const fetchInventory = async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Failed to fetch inventory:", error);
+        setLoading(false);
+        return;
+      }
+
+      // 1. Group the products by their Category
+      const groupedData = data.reduce((acc: any, curr: any) => {
+        if (!acc[curr.category]) {
+          acc[curr.category] = {
+            id: curr.category,
+            category: curr.category,
+            title: curr.category, // By default, use the category name as the Vault title
+            items: [],
+            img: curr.img_url // Use the first uploaded product's image as the Vault cover
+          };
+        }
+        
+        acc[curr.category].items.push({
+          name: curr.title,
+          color: curr.color,
+          price: `$${curr.price}`, // Format the number back to a price tag
+          img: curr.img_url
+        });
+        
+        return acc;
+      }, {});
+
+      // 2. Convert the groups into an array and count the variants
+      const dynamicVaults = Object.values(groupedData).map((vault: any) => {
+        const itemCount = vault.items.length;
+        return {
+          ...vault,
+          variants: `${itemCount < 10 ? '0' : ''}${itemCount} Styles` // Formats "1" to "01 Styles"
+        };
+      });
+
+      // 3. Optional: Map specific categories to custom Editorial titles and covers
+      // If she types "Womenswear", it still names the vault "Cropped Silhouettes"
+      const EDITORIAL_OVERRIDES: any = {
+        'Outerwear & Knits': { title: 'The Heavyweight Series', img: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=1200' },
+        'Base Layers': { title: 'Null Essentials', img: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=1200' },
+        'Womenswear': { title: 'Cropped Silhouettes' },
+        'Bottoms & Cargo': { title: 'Void Architecture' },
+        'Accessories': { title: 'Hardware & Objects' }
+      };
+
+      const finalVaults = dynamicVaults.map(v => ({
+        ...v,
+        title: EDITORIAL_OVERRIDES[v.category]?.title || v.category,
+        img: EDITORIAL_OVERRIDES[v.category]?.img || v.img // Use custom cover if it exists, otherwise use product image
+      }));
+
+      setVaults(finalVaults);
+      setLoading(false);
+    };
+
+    fetchInventory();
+  }, []);
+
+  // Lock scrolling when a vault or image is open
+  useEffect(() => {
+    if (activeVault || zoomImage) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = 'unset';
     return () => { document.body.style.overflow = 'unset'; };
   }, [activeVault, zoomImage]);
 
@@ -74,66 +101,60 @@ export default function Collections() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-20 md:gap-y-32 gap-x-16 lg:gap-x-32">
-          {collections.map((collection, i) => (
-            <motion.div 
-              key={collection.id}
-              onClick={() => setActiveVault(collection)}
-              className={`group cursor-pointer flex flex-col ${i % 2 !== 0 ? 'md:mt-48' : ''}`}
-              initial={{ opacity: 0, y: 100 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, ease: [0.33, 1, 0.68, 1] }}
-              viewport={{ once: true, margin: "-100px" }}
-            >
-              <div className="relative overflow-hidden aspect-[4/5] mb-6 md:mb-8 bg-[#111]">
-                <img 
-                  src={collection.img} 
-                  alt={collection.title}
-                  className="w-full h-full object-cover md:grayscale contrast-125 transition-transform duration-[1.5s] ease-out group-hover:scale-105 md:group-hover:grayscale-0"
-                />
-                <div className="hidden md:flex absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 items-center justify-center backdrop-blur-sm">
-                  <span className="font-sans text-sm tracking-[0.3em] uppercase text-white border border-white/30 px-8 py-4 backdrop-blur-md">
-                    Explore Vault
-                  </span>
-                </div>
-                {/* Mobile 'Explore' badge */}
-                <div className="absolute bottom-4 right-4 md:hidden bg-black/60 backdrop-blur-md border border-white/20 text-white font-sans text-[10px] uppercase tracking-widest px-4 py-2 flex items-center gap-2">
-                  Explore <span className="text-white/50">↗</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-2">{collection.category}</span>
-                    <h3 className="font-serif text-2xl md:text-4xl italic text-white/90 group-hover:text-white transition-colors">{collection.title}</h3>
+        {/* LOADING SPINNER */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-white/30 gap-6">
+            <Loader2 size={32} className="animate-spin" />
+            <span className="font-sans text-[10px] uppercase tracking-[0.3em]">Syncing Global Inventory...</span>
+          </div>
+        ) : vaults.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 text-white/30 border border-white/10 bg-[#0a0a0a]">
+            <span className="font-sans text-[10px] uppercase tracking-[0.3em]">Vaults Empty. Inject inventory via Admin Terminal.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-20 md:gap-y-32 gap-x-16 lg:gap-x-32">
+            {vaults.map((collection, i) => (
+              <motion.div 
+                key={collection.id}
+                onClick={() => setActiveVault(collection)}
+                className={`group cursor-pointer flex flex-col ${i % 2 !== 0 ? 'md:mt-48' : ''}`}
+                initial={{ opacity: 0, y: 100 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 1, ease: [0.33, 1, 0.68, 1] }}
+                viewport={{ once: true, margin: "-100px" }}
+              >
+                <div className="relative overflow-hidden aspect-[4/5] mb-6 md:mb-8 bg-[#111]">
+                  <img src={collection.img} alt={collection.title} className="w-full h-full object-cover md:grayscale contrast-125 transition-transform duration-[1.5s] ease-out group-hover:scale-105 md:group-hover:grayscale-0" />
+                  <div className="hidden md:flex absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 items-center justify-center backdrop-blur-sm">
+                    <span className="font-sans text-sm tracking-[0.3em] uppercase text-white border border-white/30 px-8 py-4 backdrop-blur-md">Explore Vault</span>
                   </div>
-                  <span className="font-mono text-[10px] md:text-xs text-black bg-white px-3 py-1 rounded-full mt-4 md:mt-6">[{collection.variants}]</span>
+                  <div className="absolute bottom-4 right-4 md:hidden bg-black/60 backdrop-blur-md border border-white/20 text-white font-sans text-[10px] uppercase tracking-widest px-4 py-2 flex items-center gap-2">
+                    Explore <span className="text-white/50">↗</span>
+                  </div>
                 </div>
-                <div className="h-[1px] w-full bg-white/10 mt-4 group-hover:bg-white/40 transition-colors duration-500" />
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-2">{collection.category}</span>
+                      <h3 className="font-serif text-2xl md:text-4xl italic text-white/90 group-hover:text-white transition-colors">{collection.title}</h3>
+                    </div>
+                    <span className="font-mono text-[10px] md:text-xs text-black bg-white px-3 py-1 rounded-full mt-4 md:mt-6">[{collection.variants}]</span>
+                  </div>
+                  <div className="h-[1px] w-full bg-white/10 mt-4 group-hover:bg-white/40 transition-colors duration-500" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* VAULT MODAL */}
       <AnimatePresence>
         {activeVault && (
           <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setActiveVault(null)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] cursor-pointer"
-            />
-            <motion.div 
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 w-full md:w-[600px] h-screen bg-[#0a0a0a] z-[70] border-l border-white/10 flex flex-col shadow-2xl"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveVault(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] cursor-pointer" />
+            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed top-0 right-0 w-full md:w-[600px] h-screen bg-[#0a0a0a] z-[70] border-l border-white/10 flex flex-col shadow-2xl">
               <div className="flex justify-between items-center p-6 md:p-8 border-b border-white/10">
                 <div>
                   <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-1">Vault Open</span>
@@ -147,33 +168,15 @@ export default function Collections() {
               <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar">
                 {activeVault.items && activeVault.items.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 md:gap-6">
-                    {activeVault.items.map((item, idx) => (
+                    {activeVault.items.map((item: any, idx: number) => (
                       <div key={idx} className="group cursor-pointer flex flex-col">
                         <div className="aspect-[3/4] bg-[#111] overflow-hidden mb-4 relative">
                           <img src={item.img} alt={item.name} className="w-full h-full object-cover md:grayscale contrast-125 transition-all duration-500 md:group-hover:scale-110 md:group-hover:grayscale-0" />
-                          
-                          {/* QUICK VIEW BUTTON - Visible on mobile, hover on desktop */}
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setZoomImage(item.img);
-                            }}
-                            className="absolute top-3 right-3 p-2 bg-black/50 backdrop-blur-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10"
-                          >
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setZoomImage(item.img); }} className="absolute top-3 right-3 p-2 bg-black/50 backdrop-blur-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                             <Maximize2 size={14} className="text-white" />
                           </button>
-
-                          {/* ADD TO BAG - Visible on mobile, hover slide on desktop */}
                           <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-300 z-10">
-                             <button 
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation(); 
-                                  addToCart({ name: item.name, color: item.color, price: item.price, img: item.img });
-                                }}
-                                className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors shadow-xl"
-                             >
+                             <button type="button" onClick={(e) => { e.stopPropagation(); addToCart({ name: item.name, color: item.color, price: item.price, img: item.img }); }} className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors shadow-xl">
                                Add to Bag
                              </button>
                           </div>
@@ -198,27 +201,9 @@ export default function Collections() {
       {/* IMAGE ZOOM MODAL */}
       <AnimatePresence>
         {zoomImage && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 md:p-12 cursor-zoom-out"
-            onClick={() => setZoomImage(null)}
-          >
-            <motion.img 
-              initial={{ scale: 0.9, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }}
-              src={zoomImage} 
-              className="max-h-full max-w-full object-contain shadow-2xl" 
-            />
-            <button 
-              type="button"
-              className="absolute top-6 right-6 md:top-8 md:right-8 text-white/50 hover:text-white transition-colors p-2 bg-black/50 rounded-full md:bg-transparent"
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoomImage(null);
-              }}
-            >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 md:p-12 cursor-zoom-out" onClick={() => setZoomImage(null)}>
+            <motion.img initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} src={zoomImage} className="max-h-full max-w-full object-contain shadow-2xl" />
+            <button type="button" className="absolute top-6 right-6 md:top-8 md:right-8 text-white/50 hover:text-white transition-colors p-2 bg-black/50 rounded-full md:bg-transparent" onClick={(e) => { e.stopPropagation(); setZoomImage(null); }}>
               <X size={24} className="md:w-10 md:h-10" strokeWidth={1.5} />
             </button>
           </motion.div>
