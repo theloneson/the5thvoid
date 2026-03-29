@@ -1,304 +1,212 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Loader2, ArrowRight, Upload, Plus, Trash2, Star } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Maximize2, Loader2 } from 'lucide-react';
+import { useCart } from '../context/CartContext';
+import { supabase } from '../lib/supabase'; 
 
-export default function Admin() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passcode, setPasscode] = useState('');
-  
-  const [orders, setOrders] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  
-  const [activeTab, setActiveTab] = useState<'ledger' | 'inventory'>('ledger');
-  const [isUploading, setIsUploading] = useState(false);
-  
-  // --- NEW: ADDED IS_COVER TO STATE ---
-  const [newProduct, setNewProduct] = useState({ 
-    title: '', category: '', color: '', price: '', file: null as File | null, isCover: false 
-  });
+export default function Collections() {
+  const [vaults, setVaults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeVault, setActiveVault] = useState<any | null>(null);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const { addToCart } = useCart();
 
-  const SECRET_CODE = "VOID2026";
+  useEffect(() => {
+    const fetchInventory = async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passcode === SECRET_CODE) {
-      setIsAuthenticated(true);
-      fetchData();
-    } else {
-      alert("ACCESS DENIED.");
-      setPasscode('');
-    }
-  };
+      if (error) {
+        console.error("Failed to fetch inventory:", error);
+        setLoading(false);
+        return;
+      }
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setOrders([]);
-    setProducts([]);
-    setPasscode('');
-  };
+      // 1. THE NEW SORTING ALGORITHM (Fixes Duplicates & Sets Covers)
+      const groupedData = data.reduce((acc: any, curr: any) => {
+        // This strips accidental spaces and makes it uppercase so "Eyewear", "eyewear", and " eyewear " all group together
+        const normalizedCat = curr.category.trim().toUpperCase(); 
+        const displayCat = curr.category.trim(); // Keeps the nice casing for the UI
 
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: orderData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-    if (orderData) setOrders(orderData);
+        if (!acc[normalizedCat]) {
+          acc[normalizedCat] = {
+            id: normalizedCat,
+            category: displayCat,
+            title: displayCat, 
+            items: [],
+            img: curr.img_url // Default to the first item if no cover is selected yet
+          };
+        }
 
-    const { data: productData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-    if (productData) setProducts(productData);
-    setLoading(false);
-  };
+        // IF THIS ITEM IS MARKED AS THE COVER, OVERWRITE THE VAULT IMAGE
+        if (curr.is_cover) {
+          acc[normalizedCat].img = curr.img_url;
+        }
+        
+        acc[normalizedCat].items.push({
+          name: curr.title,
+          color: curr.color,
+          price: `$${curr.price}`, 
+          img: curr.img_url
+        });
+        
+        return acc;
+      }, {});
 
-  const advanceStatus = async (id: string, currentStatus: string) => {
-    let newStatus = 'paid';
-    if (currentStatus === 'paid') newStatus = 'shipped';
-    else if (currentStatus === 'shipped') newStatus = 'delivered';
-    else return; 
+      const dynamicVaults = Object.values(groupedData).map((vault: any) => {
+        const itemCount = vault.items.length;
+        return { ...vault, variants: `${itemCount < 10 ? '0' : ''}${itemCount} Styles` };
+      });
 
-    setUpdatingId(id);
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id);
-    if (!error) setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    setUpdatingId(null);
-  };
+      const EDITORIAL_OVERRIDES: any = {
+        'OUTERWEAR & KNITS': { title: 'The Heavyweight Series' },
+        'BASE LAYERS': { title: 'Null Essentials' },
+        'WOMENSWEAR': { title: 'Cropped Silhouettes' },
+        'BOTTOMS & CARGO': { title: 'Void Architecture' },
+        'ACCESSORIES': { title: 'Hardware & Objects' }
+      };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProduct.file || !newProduct.title || !newProduct.price) return alert("Missing intel.");
+      const finalVaults = dynamicVaults.map(v => ({
+        ...v,
+        // Check if we have a cool editorial title for it, otherwise just use the category name
+        title: EDITORIAL_OVERRIDES[v.id]?.title || v.category,
+      }));
 
-    setIsUploading(true);
-    try {
-      const fileExt = newProduct.file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      setVaults(finalVaults);
+      setLoading(false);
+    };
 
-      const { error: uploadError } = await supabase.storage.from('product-images').upload(fileName, newProduct.file);
-      if (uploadError) throw uploadError;
+    fetchInventory();
+  }, []);
 
-      const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(fileName);
-
-      // --- NEW: INJECT THE IS_COVER FLAG ---
-      const { error: dbError } = await supabase.from('products').insert([{
-        title: newProduct.title,
-        category: newProduct.category,
-        color: newProduct.color,
-        price: parseFloat(newProduct.price),
-        img_url: publicUrl,
-        is_cover: newProduct.isCover
-      }]);
-
-      if (dbError) throw dbError;
-
-      alert("Asset injected.");
-      setNewProduct({ title: '', category: '', color: '', price: '', file: null, isCover: false });
-      fetchData();
-
-    } catch (error: any) {
-      alert("Upload Error: " + error.message);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    const confirmDelete = window.confirm("WARNING: This will permanently purge this asset from the live website. Proceed?");
-    if (!confirmDelete) return;
-
-    setUpdatingId(id);
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    
-    if (!error) {
-      setProducts(products.filter(p => p.id !== id));
-    } else {
-      alert("Failed to purge asset.");
-    }
-    setUpdatingId(null);
-  };
-
-  const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total), 0);
-  const totalOrders = orders.length;
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] bg-noise" />
-        <div className="relative z-10 max-w-sm w-full flex flex-col items-center text-center">
-          <span className="font-sans text-[10px] uppercase tracking-[0.4em] text-white/40 mb-6">Restricted Access</span>
-          <h1 className="font-serif italic text-6xl text-white mb-16">Archive.</h1>
-          <form onSubmit={handleLogin} className="flex flex-col gap-8 w-full">
-            <input type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} className="w-full bg-transparent border-b border-white/20 py-4 font-sans text-sm text-center text-white tracking-[0.5em] focus:border-white outline-none peer placeholder-transparent" placeholder="Passcode" autoFocus />
-            <button type="submit" className="w-full bg-white text-black py-5 font-sans text-[10px] uppercase tracking-[0.3em] hover:bg-gray-200 transition-colors">Unlock Vault</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (activeVault || zoomImage) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = 'unset';
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [activeVault, zoomImage]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12 relative">
+    <section className="bg-[#050505] min-h-screen px-6 md:px-12 py-20 md:py-32 relative">
       <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] bg-noise" />
       <div className="max-w-[90rem] mx-auto relative z-10">
         
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/10 pb-8 mb-12 gap-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 md:mb-24 pb-8 border-b border-white/10 gap-4">
           <div>
-            <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-4">Internal System</span>
-            <h1 className="font-serif italic text-5xl md:text-6xl text-white">Operations.</h1>
+            <span className="font-sans text-[10px] md:text-xs uppercase tracking-[0.3em] text-white/50 block mb-4">Discover</span>
+            <h2 className="font-serif italic text-4xl md:text-7xl text-white">Campaigns</h2>
           </div>
-          <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-            <button onClick={() => setActiveTab('ledger')} className={`font-sans text-[10px] uppercase tracking-[0.2em] transition-colors pb-1 border-b ${activeTab === 'ledger' ? 'text-white border-white' : 'text-white/40 border-transparent hover:text-white'}`}>The Ledger</button>
-            <span className="text-white/20">|</span>
-            <button onClick={() => setActiveTab('inventory')} className={`font-sans text-[10px] uppercase tracking-[0.2em] transition-colors pb-1 border-b ${activeTab === 'inventory' ? 'text-white border-white' : 'text-white/40 border-transparent hover:text-white'}`}>Inventory Manager</button>
-            <span className="text-white/20 ml-4">|</span>
-            <button onClick={handleLogout} className="font-sans text-[10px] uppercase tracking-[0.2em] text-white/50 hover:text-white transition-colors">Lock System</button>
+          <p className="font-sans text-[10px] md:text-sm text-white/50 max-w-xs md:text-right uppercase tracking-widest leading-relaxed">
+            Select a silhouette to view available colorways and variants.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-white/30 gap-6">
+            <Loader2 size={32} className="animate-spin" />
+            <span className="font-sans text-[10px] uppercase tracking-[0.3em]">Syncing Global Inventory...</span>
           </div>
-        </header>
-
-        {activeTab === 'ledger' ? (
-          /* TAB 1: ORDERS */
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10 border border-white/10 mb-16">
-              <div className="bg-[#050505] p-10 md:p-16 flex flex-col justify-center">
-                <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 mb-6 block">Gross Volume</span>
-                <span className="font-serif italic text-6xl md:text-8xl">${totalRevenue.toLocaleString()}</span>
-              </div>
-              <div className="bg-[#050505] p-10 md:p-16 flex flex-col justify-center">
-                <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 mb-6 block">Total Dispatches</span>
-                <span className="font-serif italic text-6xl md:text-8xl">{totalOrders}</span>
-              </div>
-            </div>
-
-            <div className="mb-8 flex justify-between items-end">
-              <div><h2 className="font-serif italic text-3xl mb-2">The Ledger</h2><p className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40">Real-time transaction log.</p></div>
-              <button onClick={fetchData} className="text-[10px] uppercase tracking-widest text-white/50 hover:text-white flex items-center gap-2">{loading ? <Loader2 size={12} className="animate-spin" /> : "Sync Data"}</button>
-            </div>
-
-            {loading && orders.length === 0 ? (
-              <div className="flex justify-center py-32 text-white/50"><Loader2 size={24} className="animate-spin" /></div>
-            ) : orders.length === 0 ? (
-              <div className="border border-white/10 py-32 text-center text-white/30 font-sans text-[10px] tracking-[0.3em] uppercase">No records found.</div>
-            ) : (
-              <div className="overflow-x-auto border border-white/10 bg-[#0a0a0a]">
-                <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead><tr className="border-b border-white/10 text-white/30 font-sans text-[10px] uppercase tracking-[0.3em]"><th className="p-6">ID</th><th className="p-6">Date</th><th className="p-6">Client Intel</th><th className="p-6">Manifest</th><th className="p-6 text-right">Total</th><th className="p-6 text-right">Status</th></tr></thead>
-                  <tbody className="font-sans">
-                    {orders.map((order) => (
-                      <tr key={order.id} className="border-b border-white/5 hover:bg-[#111] transition-colors group">
-                        <td className="p-6 text-white/30 text-xs tracking-widest">{order.id.split('-')[0]}</td>
-                        <td className="p-6 text-white/50 text-xs tracking-widest">{new Date(order.created_at).toLocaleDateString()}</td>
-                        <td className="p-6"><div className="flex flex-col gap-1"><span className="text-white text-sm tracking-wider">{order.customer_info.firstName} {order.customer_info.lastName}</span><span className="text-white/40 text-[10px]">{order.customer_info.email}</span></div></td>
-                        <td className="p-6"><div className="flex flex-col gap-3">{order.items.map((item: any, i: number) => (<div key={i} className="flex flex-col"><span className="text-white/80 text-xs">{item.name}</span><span className="text-white/30 text-[10px] italic">{item.color}</span></div>))}</div></td>
-                        <td className="p-6 text-right font-serif italic text-xl">${order.total}</td>
-                        <td className="p-6 text-right"><div className="flex flex-col items-end gap-3"><span className={`px-4 py-2 text-[9px] uppercase tracking-[0.3em] border ${order.status === 'paid' ? 'border-white/20 text-white/70' : order.status === 'shipped' ? 'bg-white/10 border-white/40 text-white' : 'bg-white border-white text-black font-bold'}`}>{order.status}</span>{order.status !== 'delivered' && <button onClick={() => advanceStatus(order.id, order.status)} disabled={updatingId === order.id} className="text-[9px] uppercase tracking-[0.2em] text-white/30 hover:text-white flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100">{updatingId === order.id ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />} Advance to {order.status === 'paid' ? 'Shipped' : 'Delivered'}</button>}</div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+        ) : vaults.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 text-white/30 border border-white/10 bg-[#0a0a0a]">
+            <span className="font-sans text-[10px] uppercase tracking-[0.3em]">Vaults Empty. Inject inventory via Admin Terminal.</span>
+          </div>
         ) : (
-          /* TAB 2: INVENTORY MANAGER */
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-            
-            {/* UPLOAD FORM */}
-            <div>
-              <div className="mb-12">
-                <h2 className="font-serif italic text-4xl mb-2">Inject Asset</h2>
-                <p className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40">Add new product to the matrix.</p>
-              </div>
-
-              <form onSubmit={handleAddProduct} className="flex flex-col gap-8">
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="relative group"><input type="text" required value={newProduct.title} onChange={(e) => setNewProduct({...newProduct, title: e.target.value})} className="w-full bg-transparent border-b border-white/20 py-3 font-sans text-sm text-white focus:border-white outline-none peer placeholder-transparent" id="title" placeholder="Name" /><label htmlFor="title" className="absolute left-0 -top-3.5 text-[10px] font-sans tracking-widest uppercase text-white/40 transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-[10px] peer-focus:text-white">Product Name</label></div>
-                  <div className="relative group"><input type="number" required value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-transparent border-b border-white/20 py-3 font-sans text-sm text-white focus:border-white outline-none peer placeholder-transparent" id="price" placeholder="Price" /><label htmlFor="price" className="absolute left-0 -top-3.5 text-[10px] font-sans tracking-widest uppercase text-white/40 transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-[10px] peer-focus:text-white">Price (USD)</label></div>
-                </div>
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="relative group"><input type="text" required value={newProduct.category} onChange={(e) => setNewProduct({...newProduct, category: e.target.value})} className="w-full bg-transparent border-b border-white/20 py-3 font-sans text-sm text-white focus:border-white outline-none peer placeholder-transparent" id="cat" placeholder="Category" /><label htmlFor="cat" className="absolute left-0 -top-3.5 text-[10px] font-sans tracking-widest uppercase text-white/40 transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-[10px] peer-focus:text-white">Category</label></div>
-                  <div className="relative group"><input type="text" required value={newProduct.color} onChange={(e) => setNewProduct({...newProduct, color: e.target.value})} className="w-full bg-transparent border-b border-white/20 py-3 font-sans text-sm text-white focus:border-white outline-none peer placeholder-transparent" id="col" placeholder="Color" /><label htmlFor="col" className="absolute left-0 -top-3.5 text-[10px] font-sans tracking-widest uppercase text-white/40 transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-[10px] peer-focus:text-white">Colorway</label></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-20 md:gap-y-32 gap-x-16 lg:gap-x-32">
+            {vaults.map((collection, i) => (
+              <motion.div 
+                key={collection.id}
+                onClick={() => setActiveVault(collection)}
+                className={`group cursor-pointer flex flex-col ${i % 2 !== 0 ? 'md:mt-48' : ''}`}
+                initial={{ opacity: 0, y: 100 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 1, ease: [0.33, 1, 0.68, 1] }}
+                viewport={{ once: true, margin: "-100px" }}
+              >
+                <div className="relative overflow-hidden aspect-[4/5] mb-6 md:mb-8 bg-[#111]">
+                  <img src={collection.img} alt={collection.title} className="w-full h-full object-cover md:grayscale contrast-125 transition-transform duration-[1.5s] ease-out group-hover:scale-105 md:group-hover:grayscale-0" />
+                  <div className="hidden md:flex absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 items-center justify-center backdrop-blur-sm">
+                    <span className="font-sans text-sm tracking-[0.3em] uppercase text-white border border-white/30 px-8 py-4 backdrop-blur-md">Explore Vault</span>
+                  </div>
+                  <div className="absolute bottom-4 right-4 md:hidden bg-black/60 backdrop-blur-md border border-white/20 text-white font-sans text-[10px] uppercase tracking-widest px-4 py-2 flex items-center gap-2">
+                    Explore <span className="text-white/50">↗</span>
+                  </div>
                 </div>
                 
-                <div className="mt-2">
-                  <label className="border border-dashed border-white/20 hover:border-white/60 transition-colors p-8 flex flex-col items-center justify-center cursor-pointer bg-[#0a0a0a]">
-                    {newProduct.file ? (
-                      <div className="text-center"><p className="font-sans text-sm text-white tracking-widest">{newProduct.file.name}</p></div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-3 text-white/40 hover:text-white"><Upload size={20} strokeWidth={1} /><span className="font-sans text-[10px] tracking-[0.2em] uppercase">Select Image</span></div>
-                    )}
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && setNewProduct({...newProduct, file: e.target.files[0]})} />
-                  </label>
-                </div>
-
-                {/* --- NEW: THE VIP COVER TOGGLE --- */}
-                <div className="flex items-center gap-3 mt-2">
-                  <input 
-                    type="checkbox" 
-                    id="isCover" 
-                    checked={newProduct.isCover}
-                    onChange={(e) => setNewProduct({...newProduct, isCover: e.target.checked})}
-                    className="w-4 h-4 accent-white bg-transparent border-white/20 cursor-pointer"
-                  />
-                  <label htmlFor="isCover" className="font-sans text-[10px] uppercase tracking-widest text-white/60 cursor-pointer select-none">
-                    Use this image as the Category Cover
-                  </label>
-                </div>
-
-                <button type="submit" disabled={isUploading} className="w-full bg-white text-black py-5 font-sans text-[10px] uppercase tracking-[0.3em] hover:bg-gray-200 transition-colors flex justify-center items-center gap-3 disabled:opacity-50 mt-4">
-                  {isUploading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} {isUploading ? "Injecting..." : "Inject into Database"}
-                </button>
-              </form>
-            </div>
-
-            {/* LIVE INVENTORY LEDGER */}
-            <div className="border-l border-white/10 pl-0 lg:pl-16 pt-16 lg:pt-0">
-              <div className="mb-8 flex justify-between items-end">
-                <div>
-                  <h2 className="font-serif italic text-2xl mb-2">Live Assets</h2>
-                  <p className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40">Manage global inventory.</p>
-                </div>
-              </div>
-
-              {loading ? (
-                <div className="flex justify-center py-12 text-white/50"><Loader2 size={16} className="animate-spin" /></div>
-              ) : products.length === 0 ? (
-                <div className="border border-white/10 py-16 text-center text-white/30 font-sans text-[10px] tracking-[0.3em] uppercase bg-[#0a0a0a]">Vault is empty.</div>
-              ) : (
-                <div className="flex flex-col gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-4">
-                  {products.map((product) => (
-                    <div key={product.id} className="group border border-white/10 bg-[#0a0a0a] p-4 flex items-center justify-between hover:border-white/30 transition-colors relative">
-                      
-                      {/* --- NEW: COVER BADGE --- */}
-                      {product.is_cover && (
-                        <div className="absolute -top-2 -left-2 bg-white text-black text-[8px] uppercase tracking-widest px-2 py-1 flex items-center gap-1 font-bold shadow-lg">
-                          <Star size={8} fill="black" /> Cover
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-16 bg-[#111] overflow-hidden">
-                          <img src={product.img_url} alt={product.title} className="w-full h-full object-cover grayscale contrast-125 group-hover:grayscale-0 transition-all" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-sans text-xs text-white/90 tracking-widest">{product.title}</span>
-                          <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-white/40">{product.category} • {product.color}</span>
-                          <span className="font-serif italic text-sm mt-1">${product.price}</span>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        onClick={() => handleDeleteProduct(product.id)}
-                        disabled={updatingId === product.id}
-                        className="p-3 text-red-900 hover:text-red-500 hover:bg-red-900/10 transition-colors disabled:opacity-50"
-                        title="Purge Asset"
-                      >
-                        {updatingId === product.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} strokeWidth={1.5} />}
-                      </button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-2">{collection.category}</span>
+                      <h3 className="font-serif text-2xl md:text-4xl italic text-white/90 group-hover:text-white transition-colors">{collection.title}</h3>
                     </div>
-                  ))}
+                    <span className="font-mono text-[10px] md:text-xs text-black bg-white px-3 py-1 rounded-full mt-4 md:mt-6">[{collection.variants}]</span>
+                  </div>
+                  <div className="h-[1px] w-full bg-white/10 mt-4 group-hover:bg-white/40 transition-colors duration-500" />
                 </div>
-              )}
-            </div>
-            
+              </motion.div>
+            ))}
           </div>
         )}
       </div>
-    </div>
+
+      <AnimatePresence>
+        {activeVault && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActiveVault(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] cursor-pointer" />
+            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed top-0 right-0 w-full md:w-[600px] h-screen bg-[#0a0a0a] z-[70] border-l border-white/10 flex flex-col shadow-2xl">
+              <div className="flex justify-between items-center p-6 md:p-8 border-b border-white/10">
+                <div>
+                  <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/40 block mb-1">Vault Open</span>
+                  <h3 className="font-serif italic text-2xl md:text-3xl text-white">{activeVault.title}</h3>
+                </div>
+                <button type="button" aria-label="Close Vault" onClick={() => setActiveVault(null)} className="p-2 hover:rotate-90 transition-transform duration-300">
+                  <X size={24} className="text-white/70 hover:text-white md:w-7 md:h-7" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar">
+                {activeVault.items && activeVault.items.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 md:gap-6">
+                    {activeVault.items.map((item: any, idx: number) => (
+                      <div key={idx} className="group cursor-pointer flex flex-col">
+                        <div className="aspect-[3/4] bg-[#111] overflow-hidden mb-4 relative">
+                          <img src={item.img} alt={item.name} className="w-full h-full object-cover md:grayscale contrast-125 transition-all duration-500 md:group-hover:scale-110 md:group-hover:grayscale-0" />
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setZoomImage(item.img); }} className="absolute top-3 right-3 p-2 bg-black/50 backdrop-blur-md opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
+                            <Maximize2 size={14} className="text-white" />
+                          </button>
+                          <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-300 z-10">
+                             <button type="button" onClick={(e) => { e.stopPropagation(); addToCart({ name: item.name, color: item.color, price: item.price, img: item.img }); }} className="w-full bg-white text-black py-3 md:py-2 font-sans text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 transition-colors shadow-xl">
+                               Add to Bag
+                             </button>
+                          </div>
+                        </div>
+                        <h4 className="font-sans text-sm tracking-wider text-white/90">{item.name}</h4>
+                        <span className="font-serif italic text-xs text-white/50">{item.color}</span>
+                        <span className="font-mono text-sm mt-2">{item.price}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-white/30 font-sans text-xs md:text-sm uppercase tracking-widest">
+                    <p>Archived. No items available.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {zoomImage && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 md:p-12 cursor-zoom-out" onClick={() => setZoomImage(null)}>
+            <motion.img initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} src={zoomImage} className="max-h-full max-w-full object-contain shadow-2xl" />
+            <button type="button" className="absolute top-6 right-6 md:top-8 md:right-8 text-white/50 hover:text-white transition-colors p-2 bg-black/50 rounded-full md:bg-transparent" onClick={(e) => { e.stopPropagation(); setZoomImage(null); }}>
+              <X size={24} className="md:w-10 md:h-10" strokeWidth={1.5} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }

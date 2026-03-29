@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, ArrowRight, Upload, Plus, Trash2 } from 'lucide-react';
+import { Loader2, ArrowRight, Upload, Plus, Trash2, Star } from 'lucide-react';
 
 export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passcode, setPasscode] = useState('');
   
-  // Data States
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   
-  // CMS States
   const [activeTab, setActiveTab] = useState<'ledger' | 'inventory'>('ledger');
   const [isUploading, setIsUploading] = useState(false);
-  const [newProduct, setNewProduct] = useState({ title: '', category: '', color: '', price: '', file: null as File | null });
+  
+  // --- NEW: ADDED IS_COVER TO STATE ---
+  const [newProduct, setNewProduct] = useState({ 
+    title: '', category: '', color: '', price: '', file: null as File | null, isCover: false 
+  });
 
   const SECRET_CODE = "VOID2026";
 
@@ -37,18 +39,13 @@ export default function Admin() {
     setPasscode('');
   };
 
-  // --- NEW: FETCH BOTH ORDERS AND PRODUCTS ---
   const fetchData = async () => {
     setLoading(true);
-    
-    // Fetch Orders
     const { data: orderData } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
     if (orderData) setOrders(orderData);
 
-    // Fetch Products
     const { data: productData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
     if (productData) setProducts(productData);
-
     setLoading(false);
   };
 
@@ -60,7 +57,6 @@ export default function Admin() {
 
     setUpdatingId(id);
     const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id);
-
     if (!error) setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
     setUpdatingId(null);
   };
@@ -79,19 +75,21 @@ export default function Admin() {
 
       const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(fileName);
 
+      // --- NEW: INJECT THE IS_COVER FLAG ---
       const { error: dbError } = await supabase.from('products').insert([{
         title: newProduct.title,
         category: newProduct.category,
         color: newProduct.color,
         price: parseFloat(newProduct.price),
-        img_url: publicUrl
+        img_url: publicUrl,
+        is_cover: newProduct.isCover
       }]);
 
       if (dbError) throw dbError;
 
       alert("Asset injected.");
-      setNewProduct({ title: '', category: '', color: '', price: '', file: null });
-      fetchData(); // Refresh the list instantly
+      setNewProduct({ title: '', category: '', color: '', price: '', file: null, isCover: false });
+      fetchData();
 
     } catch (error: any) {
       alert("Upload Error: " + error.message);
@@ -100,7 +98,6 @@ export default function Admin() {
     }
   };
 
-  // --- NEW: DELETE PRODUCT LOGIC ---
   const handleDeleteProduct = async (id: string) => {
     const confirmDelete = window.confirm("WARNING: This will permanently purge this asset from the live website. Proceed?");
     if (!confirmDelete) return;
@@ -229,7 +226,21 @@ export default function Admin() {
                   </label>
                 </div>
 
-                <button type="submit" disabled={isUploading} className="w-full bg-white text-black py-5 font-sans text-[10px] uppercase tracking-[0.3em] hover:bg-gray-200 transition-colors flex justify-center items-center gap-3 disabled:opacity-50">
+                {/* --- NEW: THE VIP COVER TOGGLE --- */}
+                <div className="flex items-center gap-3 mt-2">
+                  <input 
+                    type="checkbox" 
+                    id="isCover" 
+                    checked={newProduct.isCover}
+                    onChange={(e) => setNewProduct({...newProduct, isCover: e.target.checked})}
+                    className="w-4 h-4 accent-white bg-transparent border-white/20 cursor-pointer"
+                  />
+                  <label htmlFor="isCover" className="font-sans text-[10px] uppercase tracking-widest text-white/60 cursor-pointer select-none">
+                    Use this image as the Category Cover
+                  </label>
+                </div>
+
+                <button type="submit" disabled={isUploading} className="w-full bg-white text-black py-5 font-sans text-[10px] uppercase tracking-[0.3em] hover:bg-gray-200 transition-colors flex justify-center items-center gap-3 disabled:opacity-50 mt-4">
                   {isUploading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} {isUploading ? "Injecting..." : "Inject into Database"}
                 </button>
               </form>
@@ -251,7 +262,15 @@ export default function Admin() {
               ) : (
                 <div className="flex flex-col gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-4">
                   {products.map((product) => (
-                    <div key={product.id} className="group border border-white/10 bg-[#0a0a0a] p-4 flex items-center justify-between hover:border-white/30 transition-colors">
+                    <div key={product.id} className="group border border-white/10 bg-[#0a0a0a] p-4 flex items-center justify-between hover:border-white/30 transition-colors relative">
+                      
+                      {/* --- NEW: COVER BADGE --- */}
+                      {product.is_cover && (
+                        <div className="absolute -top-2 -left-2 bg-white text-black text-[8px] uppercase tracking-widest px-2 py-1 flex items-center gap-1 font-bold shadow-lg">
+                          <Star size={8} fill="black" /> Cover
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-16 bg-[#111] overflow-hidden">
                           <img src={product.img_url} alt={product.title} className="w-full h-full object-cover grayscale contrast-125 group-hover:grayscale-0 transition-all" />
